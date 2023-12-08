@@ -3,7 +3,7 @@ import pandas as pd
 import math
 import time
 
-#Takes a player uid and passes a dataframe to calcRank() :
+#Takes a player uid and returns a dataframe
 def getAimData(uid):
     url = "https://api.aimlab.gg/graphql"
 
@@ -60,10 +60,9 @@ def getAimData(uid):
     scenarioData = data['data']['aimlab']['plays_agg']
     
     return pd.json_normalize(scenarioData)
-    #getScores(pd.json_normalize(scenarioData))
     
 
-#Returns a python array of the dataframe that contains 1000 players :
+#Returns a python array of the dataframe that contains 50 players
 def getLeaderboard(offset):
     url = "https://api.aimlabs.com/graphql"
     
@@ -144,6 +143,7 @@ def getLeaderboard(offset):
 
 #Put the scores of the player into 3 different arrays
 def getScores(scoreDataFrame):  
+    #List of all the score ids that I need
     scenarios = ['CsLevel.VT Empyrean.VT Angle.RB668Z', 'CsLevel.VT Empyrean.VT Waves.R8TGLS', 'CsLevel.VT Empyrean.VT Sixsh.R8TGD3', 'CsLevel.VT Empyrean.VT Multi.RB6AAB',
                  'CsLevel.canner.VT Suave.R8I6UD', 'CsLevel.VT Empyrean.VT Stead.RB67MZ', 'CsLevel.zcr.VT Pillt.R8KMR0', 'CsLevel.Lowgravity56.VT Axitr.RJF5AX',
                  'CsLevel.VT Empyrean.VT Spher.RB69A4', 'CsLevel.VT Empyrean.VT Skysw.R8TH9B', 'CsLevel.VT Empyrean.VT Angle.R8X0YY', 'CsLevel.VT Empyrean.VT Arcsw.RB6A0U',
@@ -160,7 +160,7 @@ def getScores(scoreDataFrame):
     #Turn dataframe into an array
     scenArray = scoreDataFrame.to_numpy()
     
-    #If the current lines id is in one of the arrays change it to the score of the scenario
+    #Find the scores in scenArray and put them into scenarios list
     for i in range(0, len(scenArray)):
         for j in range(0, len(scenarios)):
             if type(scenarios[j]) != str:
@@ -169,15 +169,17 @@ def getScores(scoreDataFrame):
                 scenarios[j] = scenArray[i][5]
 
     
-    #If one of the scenarios wasn't found change the score to a 0
+    #If I couldn't find the score in scenArray set the score to a default of 0
     for i in range(0, len(scenarios)):
         if type(scenarios[i]) == str:
             scenarios[i] = 0
     
+    #Three lists for 3 different tiers in Voltaic community's ranking system
     beginnerScenarios = []
     intermediateScenarios = []
     advancedScenarios = []
     
+    #Put the values from scenarios into the three different tier lists
     for i in range(0, 42):
         if i < 12:
             beginnerScenarios.append(scenarios[i])
@@ -187,7 +189,6 @@ def getScores(scoreDataFrame):
             advancedScenarios.append(scenarios[i])
     
     return beginnerScenarios, intermediateScenarios, advancedScenarios
-    #getEnergy(beginnerScenarios, intermediateScenarios, advancedScenarios)
     
 #Google sheets match function
 def match(key, range):
@@ -240,6 +241,7 @@ def getEnergy(beginnerScores, intermediateScores, advancedScores):
         if counter == 2:
             canBeBeginner = False
         
+    #If they don't have at least 1 score in each category they can't be ranked
     if canBeAdvanced == False and canBeIntermediate == False and canBeBeginner == False:
         return "Unranked"
     
@@ -252,10 +254,12 @@ def getEnergy(beginnerScores, intermediateScores, advancedScores):
     #Calculate advanced scores
     advancedRank = getAdvancedEnergy(advancedScores, 1200)
             
+    #Finishes the energy calculation
     beginnerRank = harmonicMean(beginnerRank)
     intermediateRank = harmonicMean(intermediateRank)
     advancedRank = harmonicMean(advancedRank)
     
+    #Determine what overall rank the player is
     if advancedRank >= 900 and canBeAdvanced == True:
         if advancedRank >= 1200:
             return "Celestial"
@@ -340,8 +344,6 @@ def getBeginnerEnergy(beginnerScores, lowestIntermediateThreshold):
         allCategoryEnergies.append(math.floor(min(lowestIntermediateThreshold, max(twoEnergy[0], twoEnergy[1])) - .5))
         
     return allCategoryEnergies
-    #print("Beginner Scores:")
-    #print(allCategoryEnergies)
 
 
 def getIntermediateEnergy(intermediateScores, lowestAdvancedThreshold):
@@ -385,8 +387,6 @@ def getIntermediateEnergy(intermediateScores, lowestAdvancedThreshold):
         allCategoryEnergies.append(math.floor(min(lowestAdvancedThreshold, max(twoEnergy[0], twoEnergy[1])) - .5))
         
     return allCategoryEnergies
-    #print("Intermediate Scores:")
-    #print(allCategoryEnergies)
 
 
 def getAdvancedEnergy(advancedScores, maxEnergy):
@@ -436,28 +436,27 @@ def getAdvancedEnergy(advancedScores, maxEnergy):
         allCategoryEnergies.append(math.floor(min(maxEnergy, max(threeEnergy[0], threeEnergy[1], threeEnergy[2]))))
         
     return allCategoryEnergies
-    #print("Advanced Scores:")
-    #print(allCategoryEnergies)
 
 
+#Start a time to see how long program takes to run
 start_time = time.time()
 
+#Keeps track of how many people are in each rank
 rankStats = {"Unranked":0, "Iron":0, "Bronze":0, "Silver":0, "Gold":0,
              "Platinum":0, "Diamond":0, "Jade":0, "Master":0,
              "Grandmaster":0, "Nova":0, "Astra":0, "Celestial":0}
 
-#print(array[0][1])
-
+"""
+#Calculates one persons rank
 scenData = getAimData("5A815E720DEF1BDE")
 beginnerScores, intermediateScores, advancedScores = getScores(scenData)
 print(getEnergy(beginnerScores, intermediateScores, advancedScores))
+"""
 
+#Offset to be passed into getLeaderboard
 offset = 0
 
-#77s for 150
-
-""""
-#8694900
+#Searches through 150 people and gets their ranks to store in rankStats
 while offset <= 100:
     array = getLeaderboard(offset)
     
@@ -477,7 +476,7 @@ while offset <= 100:
 
 file.close()
 print(rankStats)
-"""
+
 print("Process finished --- %s seconds ---" % (time.time() - start_time))
 
 
