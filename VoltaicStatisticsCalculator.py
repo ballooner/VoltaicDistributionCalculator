@@ -4,41 +4,33 @@ import math
 import time
 
 #Takes a player uid and returns a dataframe
-def getAimData(uid):
+def getAimData(uidArray):
+    start_time = time.time()
+
     url = "https://api.aimlab.gg/graphql"
 
     payload = {
-        "query": '''
-            query GetAimlabProfileAgg($where: AimlabPlayWhere!) {
-                aimlab {
-                    plays_agg(where: $where) {
-                        group_by {
-                            task_id
-                            task_name
-                        }
-                        aggregate {
-                            count
-                            avg {
-                                score
-                                accuracy
-                            }
-                            max {
-                                score
-                                accuracy
-                                created_at
-                            }
-                        }
-                    }
-                }
-            }
-        ''',
+        "query": '''query GetAimlabProfileAgg($where: AimlabPlayWhere!) { 
+    aimlab { 
+        plays_agg(where: $where) { 
+        group_by { 
+            user_id 
+            task_id 
+        } 
+        aggregate { 
+            max { 
+            score 
+            } 
+        } 
+        } 
+    } 
+    }''',
         "variables": {"where": {
-            "is_practice": {"_eq": False},
-            "score": {"_gt": 0},
-            "user_id": {"_eq": uid}
-        }}
+                "is_practice": {"_eq": False},
+                "score": {"_gt": 0},
+                "user_id": {"_in": uidArray}
+            }}
     }
-
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
         "Accept": "application/json, text/plain, */*",
@@ -59,11 +51,14 @@ def getAimData(uid):
     data = response.json()
     scenarioData = data['data']['aimlab']['plays_agg']
     
-    return pd.json_normalize(scenarioData)
+    df = pd.json_normalize(scenarioData).sort_values(by="group_by.user_id")
     
-
+    print("getAimData finished --- %s seconds ---" % (time.time() - start_time))
+    return df
+    
 #Returns a python array of the dataframe that contains 50 players
 def getLeaderboard(offset):
+    start_time = time.time()
     url = "https://api.aimlabs.com/graphql"
     
     payload = {
@@ -139,11 +134,11 @@ def getLeaderboard(offset):
         
     tempArray = df.to_numpy()
     
+    print("getLeaderboard finished --- %s seconds ---" % (time.time() - start_time))
     return df.to_numpy()
 
-#Put the scores of the player into 3 different arrays
-def getScores(scoreDataFrame):  
-    #List of all the score ids that I need
+#Put the scores of the player into 3 different lists
+def getScores(scoreDataFrame, uidArray):  
     scenarios = ['CsLevel.VT Empyrean.VT Angle.RB668Z', 'CsLevel.VT Empyrean.VT Waves.R8TGLS', 'CsLevel.VT Empyrean.VT Sixsh.R8TGD3', 'CsLevel.VT Empyrean.VT Multi.RB6AAB',
                  'CsLevel.canner.VT Suave.R8I6UD', 'CsLevel.VT Empyrean.VT Stead.RB67MZ', 'CsLevel.zcr.VT Pillt.R8KMR0', 'CsLevel.Lowgravity56.VT Axitr.RJF5AX',
                  'CsLevel.VT Empyrean.VT Spher.RB69A4', 'CsLevel.VT Empyrean.VT Skysw.R8TH9B', 'CsLevel.VT Empyrean.VT Angle.R8X0YY', 'CsLevel.VT Empyrean.VT Arcsw.RB6A0U',
@@ -157,40 +152,26 @@ def getScores(scoreDataFrame):
                  'CsLevel.VT Empyrean.VT evaTS.R7YQ67', 'CsLevel.VT Empyrean.VT Spher.R89MOR', 'CsLevel.VT Empyrean.VT berry.R7ZWKV',
                  'CsLevel.VT Empyrean.VT evaTS.R7ZY84', 'CsLevel.VT Empyrean.VT Angle.R8AH09', 'CsLevel.VT Empyrean.VT Arcsw.R8AOQF']
     
-    #Turn dataframe into an array
-    scenArray = scoreDataFrame.to_numpy()
+    uidArray.sort()
+    uidDict = {}
     
-    #Find the scores in scenArray and put them into scenarios list
-    for i in range(0, len(scenArray)):
-        for j in range(0, len(scenarios)):
-            if type(scenarios[j]) != str:
-                continue
-            if scenarios[j] == scenArray[i][0]:
-                scenarios[j] = scenArray[i][5]
+    for value in uidArray:
+        uidDict[value] = scenarios.copy()
+    
+    for key in uidDict:
+        result = scoreDataFrame[scoreDataFrame["group_by.user_id"] == key]
+        
+        for i in range(0, len(scenarios)):
+            currScoreDataFrame = result[result["group_by.task_id"] == scenarios[i]]
+            
+            if not currScoreDataFrame.empty:
+                uidDict[key][i] = currScoreDataFrame["aggregate.max.score"].to_list()[0]
+            else:
+                uidDict[key][i] = 0
 
+    return uidDict
     
-    #If I couldn't find the score in scenArray set the score to a default of 0
-    for i in range(0, len(scenarios)):
-        if type(scenarios[i]) == str:
-            scenarios[i] = 0
-    
-    #Three lists for 3 different tiers in Voltaic community's ranking system
-    beginnerScenarios = []
-    intermediateScenarios = []
-    advancedScenarios = []
-    
-    #Put the values from scenarios into the three different tier lists
-    for i in range(0, 42):
-        if i < 12:
-            beginnerScenarios.append(scenarios[i])
-        elif i <  24:
-            intermediateScenarios.append(scenarios[i])
-        else:
-            advancedScenarios.append(scenarios[i])
-    
-    return beginnerScenarios, intermediateScenarios, advancedScenarios
-    
-#Google sheets match function
+#Google sheets match function 
 def match(key, range):
         index = len(range)
         
@@ -203,6 +184,7 @@ def match(key, range):
     
 #Calls according getEnergy functions
 def getEnergy(beginnerScores, intermediateScores, advancedScores): 
+    #start_time = time.time()
     #Make sure they have at least one score in each category
     canBeAdvanced = True
     canBeIntermediate = True
@@ -270,6 +252,7 @@ def getEnergy(beginnerScores, intermediateScores, advancedScores):
         else:
             return "Grandmaster"
         
+    #print("getEnergy finished --- %s seconds ---" % (time.time() - start_time))
     if intermediateRank >= 500 and canBeIntermediate == True:
         if intermediateRank >= 800:
             return "Master"
@@ -304,8 +287,9 @@ def harmonicMean(arrayOfNums):
     
     return 0
 
-
 def getBeginnerEnergy(beginnerScores, lowestIntermediateThreshold):
+    #start_time = time.time()
+    #Ranking scores for each scenario 
     beginnerThresholds = [
         [0, 100, 200, 300, 400],
         [0, 400, 460, 520, 650],
@@ -343,10 +327,12 @@ def getBeginnerEnergy(beginnerScores, lowestIntermediateThreshold):
 
         allCategoryEnergies.append(math.floor(min(lowestIntermediateThreshold, max(twoEnergy[0], twoEnergy[1])) - .5))
         
+    #print("getBeginnerEnergy finished --- %s seconds ---" % (time.time() - start_time))
     return allCategoryEnergies
 
-
 def getIntermediateEnergy(intermediateScores, lowestAdvancedThreshold):
+    #start_time = time.time()
+    #Ranking scores for each scenario 
     intermediateThresholds = [
         [0, 300, 500, 600, 700, 800],
         [0, 660, 720, 800, 900],
@@ -386,10 +372,12 @@ def getIntermediateEnergy(intermediateScores, lowestAdvancedThreshold):
 
         allCategoryEnergies.append(math.floor(min(lowestAdvancedThreshold, max(twoEnergy[0], twoEnergy[1])) - .5))
         
+    #print("getIntermediateEnergy finished --- %s seconds ---" % (time.time() - start_time))
     return allCategoryEnergies
 
-
 def getAdvancedEnergy(advancedScores, maxEnergy):
+    #start_time = time.time()
+    #Ranking scores for each scenario 
     advancedThresholds= [
         [0, 800, 900, 1000, 1100, 1200],
         [0, 850, 1020, 1100, 1194],
@@ -435,8 +423,8 @@ def getAdvancedEnergy(advancedScores, maxEnergy):
 
         allCategoryEnergies.append(math.floor(min(maxEnergy, max(threeEnergy[0], threeEnergy[1], threeEnergy[2]))))
         
+    #print("getAdvancedEnergy finished --- %s seconds ---" % (time.time() - start_time))
     return allCategoryEnergies
-
 
 #Start a time to see how long program takes to run
 start_time = time.time()
@@ -446,25 +434,37 @@ rankStats = {"Unranked":0, "Iron":0, "Bronze":0, "Silver":0, "Gold":0,
              "Platinum":0, "Diamond":0, "Jade":0, "Master":0,
              "Grandmaster":0, "Nova":0, "Astra":0, "Celestial":0}
 
-"""
 #Calculates one persons rank
-scenData = getAimData("5A815E720DEF1BDE")
-beginnerScores, intermediateScores, advancedScores = getScores(scenData)
-print(getEnergy(beginnerScores, intermediateScores, advancedScores))
-"""
+#scenData = getAimData(uidArray)
+#uidDict = getScores(scenData, uidArray)
+#beginnerScores, intermediateScores, advancedScores = getScores(scenData)
+#print(getEnergy(beginnerScores, intermediateScores, advancedScores))
 
-#Offset to be passed into getLeaderboard
 offset = 0
 
-#Searches through 150 people and gets their ranks to store in rankStats
 while offset <= 100:
     array = getLeaderboard(offset)
+    uidArr = []
     
     for i in range(0, len(array)):
-        scenData = getAimData(array[i][1])
-        beginnerScores, intermediateScores, advancedScores = getScores(scenData)
+        uidArr.append(array[i][1])
+    
+    scenData = getAimData(uidArr)
+    uidDict = getScores(scenData, uidArr)
+    
+    for key in uidDict:
+        beginnerScores = []
+        intermediateScores = []
+        advancedScores = []
+        
+        for i in range(0, 12):
+            beginnerScores.append(uidDict[key][i])
+        for i in range(12, 24):
+            intermediateScores.append(uidDict[key][i])
+        for i in range(24, 42):
+            advancedScores.append(uidDict[key][i])
+            
         rank = getEnergy(beginnerScores, intermediateScores, advancedScores)
-        print("Rank " + str(array[i][0]) + ": " + rank)
         rankStats[rank] = rankStats[rank] + 1
     
     file = open("RankData.txt", "w")
@@ -473,10 +473,4 @@ while offset <= 100:
     
     offset += 50
 
-
-file.close()
-print(rankStats)
-
-print("Process finished --- %s seconds ---" % (time.time() - start_time))
-
-
+print("Program finished --- %s seconds ---" % (time.time() - start_time))
