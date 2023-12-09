@@ -442,7 +442,7 @@ rankStats = {"Unranked":0, "Iron":0, "Bronze":0, "Silver":0, "Gold":0,
 
 offset = 0
 
-while offset <= 100:
+while offset <= 8500000:
     array = getLeaderboard(offset)
     uidArr = []
     
