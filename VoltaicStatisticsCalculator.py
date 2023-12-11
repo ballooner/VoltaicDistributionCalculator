@@ -1,7 +1,5 @@
-import requests
+import threading, requests, math, time
 import pandas as pd
-import math
-import time
 
 #Takes a player uid and returns a dataframe
 def getAimData(uidArray):
@@ -57,85 +55,38 @@ def getAimData(uidArray):
     return df
     
 #Returns a python array of the dataframe that contains 50 players
-def getLeaderboard(offset):
-    start_time = time.time()
+def getLeaderboard(offset, uidArray):
     url = "https://api.aimlabs.com/graphql"
-    
-    payload = {
-            "operationName": "GetLeaderboard",
-            "variables": {
-                "limit": 50,
-                "offset": offset,
-                "username": "",
-                "taskMode": 0,
-                "taskId": "gridshot",
-                "weaponId": "9mm"
-            },
-            "query": """
-                query GetLeaderboard($taskMode: Int!, $taskId: String!, $offset: Int!, $limit: Int!, $weaponId: String!, $window: Trainer_LeaderboardWindowInput, $username: String!) {
-                    Trainer {
-                        aimlab {
-                            leaderboard(
-                                input: {limit: $limit, offset: $offset, clientId: "aimlab", taskId: $taskId, taskMode: $taskMode, weaponId: $weaponId, username: $username, window: $window}
-                            ) {
-                                id
-                                data
-                                metadata {
-                                    offset
-                                    rows
-                                    totalRows
-                                    __typename
-                                }
-                                schema {
-                                    fields
-                                    id
-                                    __typename
-                                }
-                                profiles {
-                                    shepUser {
-                                        profileBannerUrl
-                                        profileImageUrl
-                                        id
-                                        __typename
-                                    }
-                                    __typename
-                                }
-                                __typename
-                            }
-                        }
-                    }
-                }
-            """
-        }
 
+    payload = "{\n  \"operationName\": \"GetLeaderboard\",\n  \"variables\": {\n    \"limit\": 50,\n    \"offset\":" + str(offset) + ",\n    \"username\": \"\",\n    \"taskMode\": 0,\n    \"taskId\": \"gridshot\",\n    \"weaponId\": \"9mm\"\n  },\n  \"query\": \"query GetLeaderboard($taskMode: Int!, $taskId: String!, $offset: Int!, $limit: Int!, $weaponId: String!, $window: Trainer_LeaderboardWindowInput, $username: String!) {\\n  \n    Trainer {\\n    \n      aimlab {\\n      \n        leaderboard(\\n        \n          input: {\\n          \n            limit: $limit, \n            offset: $offset, \n            clientId: \\\"aimlab\\\", \n            taskId: $taskId, \n            taskMode: $taskMode, \n            weaponId: $weaponId, \n            username: $username, \n            window: $window\\n          \n          }\\n        \n        ) {\\n          \n          profiles {\\n            \n            shepUser {\\n              \n              id\\n            \n            }\\n          \n          }\\n        \n        }\\n      \n      }\\n    \n    }\\n  \n  }\"\n}\n"
     headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Referer": "https://aimlabs.com/",
-            "content-type": "application/json",
-            "authorization": "",
-            "Origin": "https://aimlabs.com",
-            "Connection": "keep-alive",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-site",
-            "TE": "trailers"
-        }
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0",
+        "Accept": "*/*",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": "https://aimlabs.com/",
+        "content-type": "application/json",
+        "authorization": "",
+        "Origin": "https://aimlabs.com",
+        "Connection": "keep-alive",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-site",
+        "TE": "trailers"
+    }
 
-    response = requests.post(url, json=payload, headers=headers)
-
+    response = requests.request("POST", url, data=payload, headers=headers)
+    
     data = response.json()
 
-    leaderboardData = data['data']['Trainer']['aimlab']['leaderboard']['data']
+    leaderboardData = data['data']['Trainer']['aimlab']['leaderboard']['profiles']
         
     df = pd.json_normalize(leaderboardData)
         
     tempArray = df.to_numpy()
-    
-    print("getLeaderboard finished --- %s seconds ---" % (time.time() - start_time))
-    return df.to_numpy()
+
+    for i in range(0, len(tempArray)):
+        uidArray.append(str(tempArray[i][0]))
 
 #Put the scores of the player into 3 different lists
 def getScores(scoreDataFrame, uidArray):  
@@ -435,42 +386,49 @@ rankStats = {"Unranked":0, "Iron":0, "Bronze":0, "Silver":0, "Gold":0,
              "Grandmaster":0, "Nova":0, "Astra":0, "Celestial":0}
 
 #Calculates one persons rank
-#scenData = getAimData(uidArray)
-#uidDict = getScores(scenData, uidArray)
-#beginnerScores, intermediateScores, advancedScores = getScores(scenData)
-#print(getEnergy(beginnerScores, intermediateScores, advancedScores))
-
 offset = 0
 
-while offset <= 8500000:
-    array = getLeaderboard(offset)
-    uidArr = []
+while offset < 1000:
+    uidArray = []
+    threads = []
+
+    thread_start_time = time.time()
     
-    for i in range(0, len(array)):
-        uidArr.append(array[i][1])
+    for i in range(4):
+        threads.append(threading.Thread(target=getLeaderboard, args=(offset + 50 * i, uidArray)))
+    offset += 200
+
+    for th in threads:
+        th.start()
     
-    scenData = getAimData(uidArr)
-    uidDict = getScores(scenData, uidArr)
+    for th in threads:
+        th.join()
+        
+    print("Threads finished --- %s seconds ---" % (time.time() - thread_start_time))
     
+    scenData = getAimData(uidArray)
+    uidDict = getScores(scenData, uidArray)
+
     for key in uidDict:
         beginnerScores = []
         intermediateScores = []
         advancedScores = []
-        
+            
         for i in range(0, 12):
             beginnerScores.append(uidDict[key][i])
         for i in range(12, 24):
             intermediateScores.append(uidDict[key][i])
         for i in range(24, 42):
             advancedScores.append(uidDict[key][i])
-            
+                
         rank = getEnergy(beginnerScores, intermediateScores, advancedScores)
+        
         rankStats[rank] = rankStats[rank] + 1
-    
+        
     file = open("RankData.txt", "w")
     file.write(str(rankStats))
     file.close()
-    
-    offset += 50
+    print(offset)
+
 
 print("Program finished --- %s seconds ---" % (time.time() - start_time))
