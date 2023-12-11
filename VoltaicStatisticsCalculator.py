@@ -1,7 +1,7 @@
 import threading, requests, math, time
 import pandas as pd
 
-#Takes a player uid and returns a dataframe
+#Takes a list of player uids and returns a dataframe
 def getAimData(uidArray):
     start_time = time.time()
 
@@ -388,12 +388,14 @@ rankStats = {"Unranked":0, "Iron":0, "Bronze":0, "Silver":0, "Gold":0,
 #Calculates one persons rank
 offset = 0
 
+#Loop that will go through every player (set while loop expression to: offset < 8700000)
 while offset < 1000:
     uidArray = []
     threads = []
 
     thread_start_time = time.time()
     
+    #Set up threads so I can get 4x the player uids
     for i in range(4):
         threads.append(threading.Thread(target=getLeaderboard, args=(offset + 50 * i, uidArray)))
     offset += 200
@@ -409,6 +411,7 @@ while offset < 1000:
     scenData = getAimData(uidArray)
     uidDict = getScores(scenData, uidArray)
 
+    #getScores returns a dictionary with uids as keys and a copy of all scenarios scores needed in a list as a value
     for key in uidDict:
         beginnerScores = []
         intermediateScores = []
